@@ -56,9 +56,10 @@ router.get('/home', async (req, res, next) => {
     try {
         const { page, size, navigationId } = req.query;
         const data = await movieboxService.getHome({
-            page: parseInt(page) || 1,
-            size: parseInt(size) || 10,
-            navigationId: parseInt(navigationId) || 0
+            // Let service use defaults if not specified: page=0, navigationId=7817
+            page: page !== undefined ? parseInt(page) : undefined,
+            size: size !== undefined ? parseInt(size) : undefined,
+            navigationId: navigationId !== undefined ? parseInt(navigationId) : undefined
         });
         res.json({ success: true, data });
     } catch (error) {

@@ -26,6 +26,7 @@ apk_extracted/
 jadx_full/
 jadx_output/
 jadx_output_full/
+jadx_original/
 
 # Temporary files
 *.swp

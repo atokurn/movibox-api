@@ -20,7 +20,8 @@ import client from '../lib/movieboxClient.js';
  * @param {number} params.navigationId - Navigation ID (default: 0)
  */
 export async function getHome(params = {}) {
-    const { page = 1, size = 10, navigationId = 0 } = params;
+    // navigationId: 7817=Home, 7818=For You (from intercepted traffic)
+    const { page = 0, size = 10, navigationId = 7817 } = params;
 
     const response = await client.get('/gargan/homePage/getHome', {
         page,
@@ -68,18 +69,46 @@ export async function getRanking(params = {}) {
  * @param {string} params.keyword - Search keyword
  * @param {number} params.page - Page number
  * @param {number} params.size - Items per page
+ * 
+ * NOTE: Search endpoints may be geo-restricted. Error FDLSxl1000129 indicates
+ * server-side restriction. Home endpoint works but search is blocked for
+ * non-Indonesia IPs. A VPN/proxy to Indonesia may be required for search.
  */
 export async function search(params = {}) {
-    const { keyword, page = 1, size = 20 } = params;
+    const { keyword, page = 1, size = 18 } = params;
 
     if (!keyword) {
         throw new Error('Keyword is required');
     }
 
-    const response = await client.post('/aggregation/search/v4/searchContent', {
+    // Use v1 search endpoint from intercepted traffic
+    const response = await client.post('/gargan/search/v1/search', {
         keyword,
         page,
         size
+    });
+
+    return response.data;
+}
+
+/**
+ * Search with category params (from intercepted traffic)
+ * @param {Object} params
+ * @param {number} params.size - Items per page
+ * @param {string} params.params - Category filter (TV,SETI,VARIETY,TALK,COMIC,DOCUMENTARY)
+ * @param {Array} params.crTagIds - Tag IDs
+ */
+export async function searchWithParams(params = {}) {
+    const {
+        size = 18,
+        catParams = 'TV,SETI,VARIETY,TALK,COMIC,DOCUMENTARY',
+        crTagIds = []
+    } = params;
+
+    const response = await client.post('/gargan/search/v1/search', {
+        size,
+        params: catParams,
+        crTagIds
     });
 
     return response.data;
@@ -283,6 +312,7 @@ export default {
 
     // Search
     search,
+    searchWithParams,
     searchAlbum,
     searchStar,
 

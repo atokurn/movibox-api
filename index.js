@@ -20,7 +20,10 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { apiReference } from '@scalar/express-api-reference';
 import movieboxRoutes from './src/routes/moviebox.js';
+import movieboxPhRoutes from './src/routes/movieboxph.js';
+import { openApiSpec } from './src/lib/openapi.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,33 +33,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// API Routes
+// OpenAPI JSON endpoint
+app.get('/openapi.json', (req, res) => {
+    res.json(openApiSpec);
+});
+
+// API Routes - Gargan Mobile API (geo-restricted)
 app.use('/moviebox', movieboxRoutes);
 
-// Root endpoint
-app.get('/', (req, res) => {
-    res.json({
-        name: 'MovieBox HD API Provider',
-        version: '1.0.0',
-        description: 'REST API untuk MovieBox HD / Gargan Video',
-        endpoints: {
-            health: 'GET /moviebox/health',
-            version: 'GET /moviebox/version',
-            home: 'GET /moviebox/home',
-            navigation: 'GET /moviebox/navigation',
-            ranking: 'GET /moviebox/ranking',
-            search: 'GET /moviebox/search?keyword=...',
-            searchAlbum: 'GET /moviebox/search/album?keyword=...',
-            searchStar: 'GET /moviebox/search/star?keyword=...',
-            detail: 'GET /moviebox/detail/:contentId',
-            episodes: 'GET /moviebox/episodes/:contentId',
-            play: 'GET /moviebox/play/:contentId',
-            shorts: 'GET /moviebox/shorts',
-            shortsDetail: 'GET /moviebox/shorts/:shortsId'
-        },
-        source: 'Gargan Video (api.gargan.video)'
-    });
-});
+// API Routes - MovieBox.ph Web API (no geo-restriction, video URLs available)
+app.use('/movieboxph', movieboxPhRoutes);
+
+// Scalar API Documentation (served at root)
+app.use(
+    '/',
+    apiReference({
+        url: '/openapi.json',
+        theme: 'purple',
+        layout: 'modern',
+        darkMode: true,
+    })
+);
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -90,6 +87,7 @@ app.listen(PORT, () => {
   Server running on port ${PORT}
   
   Endpoints:
+  - GET  / (API Documentation)
   - GET  /moviebox/health
   - GET  /moviebox/home
   - GET  /moviebox/search?keyword=...

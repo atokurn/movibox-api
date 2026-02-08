@@ -4,7 +4,7 @@
  * ========================================
  * 
  * Configured axios client with proper headers for Gargan API.
- * Based on intercepted traffic from actual app.
+ * Supports geo-location headers for region-specific content.
  */
 
 import axios from 'axios';
@@ -22,6 +22,16 @@ const VERSION_CODE = 218;
 const CLIENT_TYPE = 'android_gargan';
 const USER_AGENT = 'okhttp/4.12.0';
 
+// Indonesia geo data (for accessing full content)
+const INDONESIA_GEO = {
+    latitude: '-6.2088',      // Jakarta
+    longitude: '106.8456',
+    isoCode: 'ID',
+    isoName: 'Indonesia',
+    reliable: 'true',
+    mcc: '510'                // Indonesia MCC
+};
+
 // Persistent device context
 let deviceContext = null;
 
@@ -30,15 +40,44 @@ let deviceContext = null;
  */
 function getDeviceContext() {
     if (!deviceContext) {
+        // Default to FALSE - sending empty geo headers like APK does without GPS
+        // Spoofed geo coordinates may trigger server-side geo-blocking detection
+        const useIndonesiaGeo = process.env.USE_INDONESIA_GEO === 'true';
+
         deviceContext = {
             deviceId: process.env.DEVICE_ID || generateDeviceId(),
             adId: process.env.AD_ID || generateAdId(),
-            language: process.env.LANGUAGE || 'en',
-            timezone: process.env.TIMEZONE || getTimezoneString(),
-            mcc: process.env.MCC || ''
+            language: process.env.LANGUAGE || 'in_ID',  // Indonesian by default
+            timezone: process.env.TIMEZONE || 'WIB',    // Indonesia timezone
+            mcc: process.env.MCC || '310',  // Default 310 from intercepted traffic
+            geo: useIndonesiaGeo ? INDONESIA_GEO : null
         };
     }
     return deviceContext;
+}
+
+/**
+ * Generate X-Request-Source header
+ * XOR of sp_play_id_s with deviceId, base64 encoded
+ */
+function generateRequestSource(deviceId) {
+    // This is derived from the APK - XOR of stored ID with device ID
+    // For now, generate a simple encoded string
+    const playId = process.env.PLAY_ID || crypto.randomBytes(12).toString('base64');
+    try {
+        const playIdBytes = Buffer.from(playId);
+        const deviceIdBytes = Buffer.from(deviceId);
+        const result = Buffer.alloc(playIdBytes.length);
+
+        for (let i = 0; i < playIdBytes.length; i++) {
+            result[i] = playIdBytes[i] ^ deviceIdBytes[i % deviceIdBytes.length];
+        }
+
+        // Base64 URL-safe encoding without padding
+        return result.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    } catch (e) {
+        return null;
+    }
 }
 
 /**
@@ -61,13 +100,6 @@ function buildHeaders(signature, options = {}) {
         'timezone': context.timezone,
         'keke': 'true',
 
-        // Geo headers (empty when not available)
-        'geoLatitude': '',
-        'geoLongitude': '',
-        'geoIsoCode': '',
-        'geoIsoName': '',
-        'geoReliable': '',
-
         // Signature headers
         'sign': signature.sign,
         'aesKey': signature.aesKey,
@@ -75,8 +107,30 @@ function buildHeaders(signature, options = {}) {
         'currentTime': String(signature.time)
     };
 
+    // Add geo headers
+    if (context.geo) {
+        headers['geoLatitude'] = context.geo.latitude;
+        headers['geoLongitude'] = context.geo.longitude;
+        headers['geoIsoCode'] = context.geo.isoCode;
+        headers['geoIsoName'] = context.geo.isoName;
+        headers['geoReliable'] = context.geo.reliable;
+    } else {
+        headers['geoLatitude'] = '';
+        headers['geoLongitude'] = '';
+        headers['geoIsoCode'] = '';
+        headers['geoIsoName'] = '';
+        headers['geoReliable'] = '';
+    }
+
+    // Add MCC if available
     if (context.mcc) {
         headers['mcc'] = context.mcc;
+    }
+
+    // Add X-Request-Source
+    const requestSource = generateRequestSource(context.deviceId);
+    if (requestSource) {
+        headers['X-Request-Source'] = requestSource;
     }
 
     return headers;
@@ -156,13 +210,27 @@ export function setContext(ctx) {
     return deviceContext;
 }
 
+/**
+ * Set geo location
+ */
+export function setGeoLocation(geo) {
+    const context = getDeviceContext();
+    context.geo = geo;
+    if (geo?.mcc) {
+        context.mcc = geo.mcc;
+    }
+    return context;
+}
+
 export default {
     get,
     post,
     getContext,
     resetContext,
     setContext,
+    setGeoLocation,
     BASE_URL,
     H5_BASE_URL,
-    STATIC_URL
+    STATIC_URL,
+    INDONESIA_GEO
 };
